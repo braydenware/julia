@@ -437,8 +437,25 @@ let dir = mktempdir()
         """
 
         exename = `$(Base.julia_cmd()) --startup-file=no`
-        @test readchomp(`$exename -E $(testcode)`) == "nothing"
-        @test readchomp(`$exename -E $(testcode)`) == "nothing"
+        let fname = tempname()
+            try
+                @test readchomp(pipeline(`$exename -E $(testcode)`, stderr=fname)) == "nothing"
+                @test Test.ismatch_warn("WARNING: replacing module $Test_module.\n", readstring(fname))
+            finally
+                rm(fname, force=true)
+            end
+        end
+        # Test that when the cachefile is staleness `Base.Iterators` is not brought into `Main`,
+        # leading to a namespace conflict with the module `Iterators` defined above.
+        let fname = tempname()
+            try
+                @test readchomp(pipeline(`$exename -E $(testcode)`, stderr=fname)) == "nothing"
+                # e.g `@test_nowarn`
+                @test Test.ismatch_warn(r"^(?!.)"s, readstring(fname))
+            finally
+                rm(fname, force=true)
+            end
+        end
     finally
         rm(dir, recursive=true)
     end
